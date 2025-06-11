@@ -1,0 +1,17 @@
+version: '3.6'
+services:
+  tgbot_local_postgres:
+    ports:
+      - '${DB_EXTERNAL_PORT}:5432'
+    image: postgres:15.3-alpine
+    volumes:
+      - 'tgbot_db:/var/lib/postgresql/data'
+      - './db_init:/docker-entrypoint-initdb.d'
+    environment:
+      TZ: Asia/Tashkent
+      PGTZ: Asia/Tashkent
+      POSTGRES_DB: '${DB_DATABASE}'
+      POSTGRES_USER: '${DB_USERNAME}'
+      POSTGRES_PASSWORD: '${DB_PASSWORD}'
+volumes:
+  tgbot_db:
