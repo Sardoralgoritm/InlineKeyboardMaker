@@ -12,7 +12,7 @@ public class ChannelDto
     public bool IsPublic { get; set; }
     public string? InviteLink { get; set; }
     public DateTime? LastChecked { get; set; }
-    public long OwnerId { get; set; }
+    public long? OwnerId { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Display properties

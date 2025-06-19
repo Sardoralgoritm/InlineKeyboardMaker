@@ -3,6 +3,10 @@ using InlineKeyboardBot.Models.Telegram;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types;
 using Telegram.Bot;
+using InlineKeyboardBot.Services.Interfaces;
+using System.Collections.Generic;
+using Telegram.Bot.Types.ReplyMarkups;
+using InlineKeyboardBot.Services;
 
 namespace InlineKeyboardBot.Handlers;
 
@@ -10,17 +14,20 @@ public class CommandHandler : ICommandHandler
 {
     private readonly ITelegramBotClient _botClient;
     private readonly IUserService _userService;
+    private readonly IUserSessionService _userSessionService;
     private readonly IChannelService _channelService;
     private readonly ILogger<CommandHandler> _logger;
 
     public CommandHandler(
         ITelegramBotClient botClient,
         IUserService userService,
+        IUserSessionService userSessionService,
         IChannelService channelService,
         ILogger<CommandHandler> logger)
     {
         _botClient = botClient;
         _userService = userService;
+        _userSessionService = userSessionService;
         _channelService = channelService;
         _logger = logger;
     }
@@ -46,12 +53,42 @@ public class CommandHandler : ICommandHandler
     {
         try
         {
-            _logger.LogInformation("Handling command {Command} from user {UserId}",
-                command, message.From?.Id);
+            _logger.LogInformation("Handling command {Command} from chat {ChatId}",
+                command, message.Chat.Id);
 
-            // User ma'lumotlarini olish/yaratish
+            // Channel message'larda From null bo'lishi mumkin
+            if (message.From == null)
+            {
+                _logger.LogWarning("Command {Command} received from channel {ChatId} without From field",
+                    command, message.Chat.Id);
+
+                // Channel'dan kelgan buyruqlar uchun (masalan /register)
+                if (command == BotCommands.Register)
+                {
+                    // Channel registration logic
+                    var registered = await _channelService.RegisterChannelAsync(message);
+                    if (registered)
+                    {
+                        _logger.LogInformation("Channel {ChatId} registered successfully", message.Chat.Id);
+                        await _botClient.SendTextMessageAsync(
+                                chatId: message.Chat.Id,
+                                text: "✅ Kanal muvaffaqiyatli ro'yxatga qo'shildi!\n\n📝 Kanalga egalik huquqini olish uchun bot'ga o'tib kanalingiz nomini yuboring.",
+                                cancellationToken: cancellationToken);
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(
+                                chatId: message.Chat.Id,
+                                text: "❌ Kanalni ro'yxatga qo'shishda xatolik yuz berdi.",
+                                cancellationToken: cancellationToken);
+                    }
+                }
+                return;
+            }
+
+            // User ma'lumotlarini olish/yaratish (faqat From mavjud bo'lsa)
             var user = await _userService.GetOrCreateUserAsync(
-                message.From!.Id,
+                message.From.Id,
                 message.From.Username ?? "",
                 message.From.FirstName,
                 message.From.LastName);
@@ -69,13 +106,17 @@ public class CommandHandler : ICommandHandler
                 BotCommands.Settings => HandleSettingsCommand(message, cancellationToken),
                 _ => HandleUnknownCommand(message, command, cancellationToken)
             };
-
             await handler;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling command {Command}", command);
-            await SendErrorMessage(message.Chat.Id, "Buyruqni bajarishda xatolik yuz berdi.");
+
+            // Error message faqat private chat'da va From mavjud bo'lsa yuborish
+            if (message.Chat.Type == ChatType.Private && message.From != null)
+            {
+                await SendErrorMessage(message.Chat.Id, "Buyruqni bajarishda xatolik yuz berdi.");
+            }
         }
     }
 
@@ -129,7 +170,7 @@ public class CommandHandler : ICommandHandler
             **📺 Kanal qo'shish:**
             1. Botni kanalingizga admin qiling
             2. Kanal ichida /register buyrug'ini yuboring
-            3. Bot kanal ma'lumotlarini saqlaydi
+            3. Botga o'tib kanalingiz nomini yozing
             
             **📝 Post yaratish:**
             1. "Yangi Post" tugmasini bosing
@@ -174,16 +215,14 @@ public class CommandHandler : ICommandHandler
                 cancellationToken: cancellationToken);
             return;
         }
-
         try
         {
             var success = await _channelService.RegisterChannelAsync(message);
-
             if (success)
             {
                 await _botClient.SendTextMessageAsync(
                     chatId: message.Chat.Id,
-                    text: "✅ Kanal muvaffaqiyatli ro'yxatga qo'shildi!\n\nEndi siz bot orqali bu kanalga post yuborishingiz mumkin.",
+                    text: "✅ Kanal muvaffaqiyatli ro'yxatga qo'shildi!\n\n📝 Kanalga egalik huquqini olish uchun bot'ga o'tib kanalingiz nomini yuboring.",
                     cancellationToken: cancellationToken);
             }
             else
@@ -213,14 +252,16 @@ public class CommandHandler : ICommandHandler
             await _botClient.SendTextMessageAsync(
                 chatId: message.Chat.Id,
                 text: """
-                    📺 Sizda hali kanallar yo'q.
-                    
-                    **Kanal qo'shish uchun:**
-                    1. Botni kanalingizga admin qiling
-                    2. Kanal ichida /register buyrug'ini yuboring
-                    
-                    Batafsil ma'lumot uchun /help buyrug'ini yuboring.
-                    """,
+                📺 Sizda hali kanallar yo'q.
+                
+                **Kanal qo'shish uchun:**
+                1. 🤖 Bot'ni kanalingizga admin qilib qo'shing
+                2. 📝 Kanal ichida `/register` buyrug'ini yuboring  
+                3. 🔗 Bot'ga qaytib, kanal nomini yozing
+                4. ✅ Kanal sizga biriktiriladi!
+                
+                💡 Batafsil ma'lumot uchun /help buyrug'ini yuboring.
+                """,
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
@@ -238,8 +279,7 @@ public class CommandHandler : ICommandHandler
 
     private async Task HandleNewPostCommand(Message message, CancellationToken cancellationToken)
     {
-        // Post yaratish jarayonini boshlash
-        // Bu qismni keyinroq PostService bilan implement qilamiz
+        await _userSessionService.CreateSessionAsync(message.From!.Id, SessionStates.CreatingPost);
 
         await _botClient.SendTextMessageAsync(
             chatId: message.Chat.Id,

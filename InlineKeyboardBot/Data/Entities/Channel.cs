@@ -29,11 +29,19 @@ public class Channel : BaseEntity
 
     public DateTime? LastChecked { get; set; }
 
-    // 🆕 Owner ma'lumotlari
-    [Required]
-    public long OwnerId { get; set; }
+    public ClaimStatus ClaimStatus { get; set; } = ClaimStatus.Pending;
+    public DateTime? ClaimExpiresAt { get; set; }
+
+    public long? OwnerId { get; set; }
 
     // Navigation property
     [ForeignKey(nameof(OwnerId))]
     public virtual User Owner { get; set; } = default!;
+}
+
+public enum ClaimStatus
+{
+    Pending = 0,
+    Claimed = 1,
+    Expired = 2     
 }

@@ -26,9 +26,9 @@ public static class CallbackCommands
 
     // Channel management
     public const string AddChannel = "add_channel";
-    public const string SelectChannel = "select_channel_";
-    public const string RemoveChannel = "remove_channel_";
-    public const string ChannelStats = "channel_stats_";
+    public const string SelectChannel = "select_channel";
+    public const string RemoveChannel = "remove_channel";
+    public const string ChannelStats = "channel_stats";
 
     // Post management
     public const string ViewPost = "view_post_";

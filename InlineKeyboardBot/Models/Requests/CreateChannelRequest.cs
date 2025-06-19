@@ -17,8 +17,7 @@ public class CreateChannelRequest
     [MaxLength(500)]
     public string? Description { get; set; }
 
-    [Required]
-    public long OwnerId { get; set; }
+    public long? OwnerId { get; set; }
 
     public bool IsPublic { get; set; }
 

@@ -4,23 +4,27 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using Telegram.Bot.Types;
 using Telegram.Bot;
+using InlineKeyboardBot.Services.Interfaces;
 
 namespace InlineKeyboardBot.Handlers;
 
 public class MessageHandler : IMessageHandler
 {
     private readonly ITelegramBotClient _botClient;
+    private readonly IUserSessionService _userSessionService;
     private readonly IUserService _userService;
     private readonly IChannelService _channelService;
     private readonly ILogger<MessageHandler> _logger;
 
     public MessageHandler(
         ITelegramBotClient botClient,
+        IUserSessionService userSessionService,
         IUserService userService,
         IChannelService channelService,
         ILogger<MessageHandler> logger)
     {
         _botClient = botClient;
+        _userSessionService = userSessionService;
         _userService = userService;
         _channelService = channelService;
         _logger = logger;
@@ -182,7 +186,41 @@ public class MessageHandler : IMessageHandler
     {
         var text = message.Text!.Trim();
 
-        // Post text validation
+        // 1. Post yaratish session'i tekshirish
+        var userSession = await _userSessionService.GetActiveSessionAsync(message.From!.Id);
+
+        if (userSession?.State == SessionStates.CreatingPost)
+        {
+            // Post yaratish jarayonida
+            await HandlePostTextInput(message, text, cancellationToken);
+            await _userSessionService.ClearSessionAsync(message.From!.Id, SessionStates.CreatingPost);
+            return;
+        }
+
+        // 2. Default: Channel claiming (session yo'q bo'lsa)
+        if (message.Chat.Type == ChatType.Private)
+        {
+            var claimResult = await _channelService.ClaimChannelByNameAsync(message.From!.Id, text);
+
+            if (claimResult)
+            {
+                await _botClient.SendTextMessageAsync(
+                    chatId: message.Chat.Id,
+                    text: $"✅ Kanal '{text}' muvaffaqiyatli sizga biriktirildi!",
+                    cancellationToken: cancellationToken);
+            }
+            else
+            {
+                await _botClient.SendTextMessageAsync(
+                    chatId: message.Chat.Id,
+                    text: $"❌ '{text}' nomli kanal topilmadi.\n\n💡 Post yaratish uchun /newpost buyrug'ini yuboring.",
+                    cancellationToken: cancellationToken);
+            }
+        }
+    }
+
+    private async Task HandlePostTextInput(Message message, string text, CancellationToken cancellationToken)
+    {
         if (text.Length > 4096)
         {
             await _botClient.SendTextMessageAsync(
@@ -202,8 +240,6 @@ public class MessageHandler : IMessageHandler
             return;
         }
 
-        // Post textini session ga saqlash (keyinroq implement qilamiz)
-        // await SavePostTextToSession(message.From!.Id, text);
 
         var keyboard = new InlineKeyboardMarkup(new[]
         {

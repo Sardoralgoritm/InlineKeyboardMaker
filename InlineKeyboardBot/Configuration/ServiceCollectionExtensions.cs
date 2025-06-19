@@ -153,6 +153,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IChannelRepository, ChannelRepository>();
+        services.AddScoped<IUserSessionRepository, UserSessionRepository>();
 
         return services;
     }
@@ -164,6 +165,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IChannelService, ChannelService>();
         services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<IUserSessionService, UserSessionService>();
 
         // Additional services (keyinroq qo'shamiz)
         // services.AddScoped<IPostService, PostService>();
@@ -276,14 +278,8 @@ public class TelegramBotHealthCheck : IHealthCheck
     }
 }
 
-/// <summary>
-/// Application middleware konfiguratsiyasi
-/// </summary>
 public static class ApplicationBuilderExtensions
 {
-    /// <summary>
-    /// Bot middleware'larini qo'shish
-    /// </summary>
     public static IApplicationBuilder UseBotMiddleware(this IApplicationBuilder app, IWebHostEnvironment env)
     {
         if (env.IsDevelopment())
@@ -309,9 +305,6 @@ public static class ApplicationBuilderExtensions
         return app;
     }
 
-    /// <summary>
-    /// Database migration va webhook setup
-    /// </summary>
     public static async Task<IApplicationBuilder> InitializeBotAsync(this IApplicationBuilder app)
     {
         using var scope = app.ApplicationServices.CreateScope();

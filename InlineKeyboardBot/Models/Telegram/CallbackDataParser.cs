@@ -8,6 +8,16 @@ public class CallbackDataParser
     public static CallbackDataParser Parse(string callbackData)
     {
         var parts = callbackData.Split('_');
+
+        if (parts.Length >= 3 && parts[0] == "select" && parts[1] == "channel")
+        {
+            return new CallbackDataParser
+            {
+                Command = "select_channel",
+                Parameters = parts.Skip(2).ToList()  // ["guid-here"]
+            };
+        }
+
         return new CallbackDataParser
         {
             Command = parts[0],

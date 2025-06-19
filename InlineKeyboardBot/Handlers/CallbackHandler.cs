@@ -2,6 +2,8 @@
 using InlineKeyboardBot.Models.Telegram;
 using Telegram.Bot.Types;
 using Telegram.Bot;
+using InlineKeyboardBot.Services.Interfaces;
+using Telegram.Bot.Types.Enums;
 
 namespace InlineKeyboardBot.Handlers;
 
@@ -9,17 +11,20 @@ public class CallbackHandler : ICallbackHandler
 {
     private readonly ITelegramBotClient _botClient;
     private readonly IUserService _userService;
+    private readonly IUserSessionService _userSessionService;
     private readonly IChannelService _channelService;
     private readonly ILogger<CallbackHandler> _logger;
 
     public CallbackHandler(
         ITelegramBotClient botClient,
         IUserService userService,
+        IUserSessionService userSessionService,
         IChannelService channelService,
         ILogger<CallbackHandler> logger)
     {
         _botClient = botClient;
         _userService = userService;
+        _userSessionService = userSessionService;
         _channelService = channelService;
         _logger = logger;
     }
@@ -31,7 +36,7 @@ public class CallbackHandler : ICallbackHandler
 
         var parser = CallbackDataParser.Parse(callbackData);
 
-        return parser.Command switch
+        return callbackData switch
         {
             CallbackCommands.NewPost => true,
             CallbackCommands.MyPosts => true,
@@ -53,9 +58,10 @@ public class CallbackHandler : ICallbackHandler
             CallbackCommands.BackToMenu => true,
             CallbackCommands.BackToChannels => true,
             CallbackCommands.BackToPosts => true,
-            var cmd when cmd.StartsWith("select_channel_") => true,
-            var cmd when cmd.StartsWith("remove_channel_") => true,
-            var cmd when cmd.StartsWith("channel_stats_") => true,
+            var cmd when cmd.StartsWith("select_channel") => true,
+            var cmd when cmd.StartsWith("new_post") => true,
+            var cmd when cmd.StartsWith("remove_channel") => true,
+            var cmd when cmd.StartsWith("channel_stats") => true,
             var cmd when cmd.StartsWith("view_post_") => true,
             var cmd when cmd.StartsWith("edit_post_") => true,
             var cmd when cmd.StartsWith("delete_post_") => true,
@@ -79,7 +85,7 @@ public class CallbackHandler : ICallbackHandler
 
             var parser = CallbackDataParser.Parse(callbackQuery.Data!);
 
-            var handler = parser.Command switch
+            var handler = callbackQuery.Data switch
             {
                 CallbackCommands.NewPost => HandleNewPost(callbackQuery, cancellationToken),
                 CallbackCommands.MyPosts => HandleMyPosts(callbackQuery, cancellationToken),
@@ -104,6 +110,7 @@ public class CallbackHandler : ICallbackHandler
                 var cmd when cmd.StartsWith("remove_channel") => HandleRemoveChannel(callbackQuery, parser, cancellationToken),
                 var cmd when cmd.StartsWith("channel_stats") => HandleChannelStats(callbackQuery, parser, cancellationToken),
                 var cmd when cmd.StartsWith("view_post") => HandleViewPost(callbackQuery, parser, cancellationToken),
+                var cmd when cmd.StartsWith("new_post") => HandleNewPost(callbackQuery, cancellationToken),
                 var cmd when cmd.StartsWith("edit_post") => HandleEditPostCallback(callbackQuery, parser, cancellationToken),
                 var cmd when cmd.StartsWith("delete_post") => HandleDeletePost(callbackQuery, parser, cancellationToken),
                 var cmd when cmd.StartsWith("confirm_yes") => HandleConfirmYes(callbackQuery, parser, cancellationToken),
@@ -127,6 +134,8 @@ public class CallbackHandler : ICallbackHandler
 
     private async Task HandleNewPost(CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
+        await _userSessionService.CreateSessionAsync(callbackQuery.From!.Id, SessionStates.CreatingPost);
+
         await _botClient.EditMessageTextAsync(
             chatId: callbackQuery.Message!.Chat.Id,
             messageId: callbackQuery.Message.MessageId,
@@ -161,6 +170,7 @@ public class CallbackHandler : ICallbackHandler
                    ✅ Edit Messages  
                    ✅ Delete Messages
                 3. Kanal ichida /register buyrug'ini yuboring
+                4. Botga o'tib kanalingiz nomini yuboring
                 
                 **Eslatma:** Bot faqat siz admin bo'lgan kanallarga post yuborishi mumkin.
                 """,
@@ -346,14 +356,26 @@ public class CallbackHandler : ICallbackHandler
 
         var channelId = parser.GetGuidParameter(0);
 
-        // Kanal ma'lumotlarini olish va post yuborish
-        // Bu qismni ChannelService va PostService bilan implement qilamiz
+        var channel = await _channelService.GetChannelDtoByIdAsync(channelId);
+        if (channel == null)
+        {
+            await _botClient.EditMessageTextAsync(
+                chatId: callbackQuery.Message!.Chat.Id,
+                messageId: callbackQuery.Message.MessageId,
+                text: "❌ Kanal topilmadi!",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var keyboard = InlineKeyboardHelper.ChannelSelectAction(channelId);
 
         await _botClient.EditMessageTextAsync(
-            chatId: callbackQuery.Message!.Chat.Id,
-            messageId: callbackQuery.Message.MessageId,
-            text: $"📺 Kanal tanlandi! Post yuborish qismi hali ishlab chiqilmoqda...\n\nKanal ID: {channelId}",
-            cancellationToken: cancellationToken);
+                chatId: callbackQuery.Message!.Chat.Id,
+                messageId: callbackQuery.Message.MessageId,
+                text: $"📺 **{channel.Title}**\n\nAmalni tanlang:",
+                parseMode: ParseMode.Markdown,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
     }
 
     private async Task HandleRemoveChannel(CallbackQuery callbackQuery, CallbackDataParser parser, CancellationToken cancellationToken)
@@ -442,7 +464,6 @@ public class CallbackHandler : ICallbackHandler
             showAlert: true,
             cancellationToken: cancellationToken);
     }
-}
 
     private async Task HandleMyPosts(CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
@@ -468,6 +489,7 @@ public class CallbackHandler : ICallbackHandler
                     **Kanal qo'shish uchun:**
                     1. Botni kanalingizga admin qiling
                     2. Kanal ichida /register buyrug'ini yuboring
+                    3. Botga o'tib kanalingiz nomini yuboring
                     """,
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
                 cancellationToken: cancellationToken);

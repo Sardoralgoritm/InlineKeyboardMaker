@@ -7,6 +7,7 @@ namespace InlineKeyboardBot.Services.Interfaces;
 
 public interface IChannelService
 {
+    Task<bool> ClaimChannelByNameAsync(long userId, string channelName);
     Task<Channel> CreateChannelAsync(CreateChannelRequest request);
     Task<bool> RegisterChannelAsync(Message message);
     Task<Channel?> GetChannelByIdAsync(Guid id);

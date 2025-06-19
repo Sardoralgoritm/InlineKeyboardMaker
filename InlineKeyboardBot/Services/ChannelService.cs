@@ -32,10 +32,6 @@ public class ChannelService : IChannelService
     {
         try
         {
-            //var user = await _userRepository.GetByIdAsync(request.ChatId);
-            //if (user == null)
-            //    throw new ArgumentException("User not found");
-
             var channel = new Channel
             {
                 Id = Guid.NewGuid(),
@@ -44,19 +40,19 @@ public class ChannelService : IChannelService
                 ChatId = request.ChatId,
                 Description = request.Description,
                 OwnerId = request.OwnerId,
+                ClaimStatus = request.OwnerId.HasValue ? ClaimStatus.Claimed : ClaimStatus.Pending,
+                ClaimExpiresAt = request.OwnerId.HasValue ? null : DateTime.UtcNow.AddHours(24),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
-
             await _channelRepository.AddAsync(channel);
-            _logger.LogInformation("Channel created: {ChannelName} by user {UserId}",
-                channel.Title, request.OwnerId);
-
+            _logger.LogInformation("Channel created: {ChannelName} with status {Status}",
+                channel.Title, channel.ClaimStatus);
             return channel;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating channel for user {UserId}", request.OwnerId);
+            _logger.LogError(ex, "Error creating channel {Title}", request.Title);
             throw;
         }
     }
@@ -67,20 +63,17 @@ public class ChannelService : IChannelService
         {
             if (message.Chat.Type != ChatType.Channel && message.Chat.Type != ChatType.Supergroup)
                 return false;
-
             var existingChannel = await _channelRepository.GetByChatIdAsync(message.Chat.Id);
             if (existingChannel != null)
                 return false;
-
             var request = new CreateChannelRequest
             {
                 Title = message.Chat.Title ?? "Unknown Channel",
                 Username = message.Chat.Username,
                 ChatId = message.Chat.Id,
                 Description = message.Chat.Description,
-                OwnerId = message.From?.Id ?? 0
+                OwnerId = null
             };
-
             await CreateChannelAsync(request);
             return true;
         }
@@ -90,7 +83,6 @@ public class ChannelService : IChannelService
             return false;
         }
     }
-
     public async Task<Channel?> GetChannelByIdAsync(Guid id)
     {
         try
@@ -283,5 +275,42 @@ public class ChannelService : IChannelService
             IsActive = channel.IsActive,
             CreatedAt = channel.CreatedAt
         };
+    }
+
+    public async Task<bool> ClaimChannelByNameAsync(long userId, string channelName)
+    {
+        try
+        {
+            var pendingChannels = await _channelRepository.GetPendingChannelsByNameAsync(channelName);
+
+            if (!pendingChannels.Any())
+            {
+                _logger.LogInformation("No pending channels found with name {ChannelName}", channelName);
+                return false;
+            }
+
+            if (pendingChannels.Count > 1)
+            {
+                _logger.LogWarning("Multiple pending channels found with name {ChannelName}. Count: {Count}",
+                    channelName, pendingChannels.Count);
+                // Birinchisini olish yoki keyinroq selection logic qo'shish mumkin
+            }
+
+            var channel = pendingChannels.First();
+            channel.OwnerId = userId;
+            channel.ClaimStatus = ClaimStatus.Claimed;
+            channel.ClaimExpiresAt = null;
+            channel.UpdatedAt = DateTime.UtcNow;
+
+            await _channelRepository.UpdateAsync(channel);
+
+            _logger.LogInformation("Channel {ChannelId} claimed by user {UserId}", channel.Id, userId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error claiming channel {ChannelName} by user {UserId}", channelName, userId);
+            return false;
+        }
     }
 }

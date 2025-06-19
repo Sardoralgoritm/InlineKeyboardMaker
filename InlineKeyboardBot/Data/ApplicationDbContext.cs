@@ -34,14 +34,15 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.OwnerId); // 🆕 Owner index
             entity.Property(e => e.ChatId).IsRequired();
             entity.Property(e => e.Title).IsRequired();
-            entity.Property(e => e.OwnerId).IsRequired();
+            entity.Property(e => e.OwnerId).IsRequired(false);
 
             // 🆕 Foreign key relationship
             entity.HasOne(e => e.Owner)
                   .WithMany(u => u.OwnedChannels)
                   .HasForeignKey(e => e.OwnerId)
                   .HasPrincipalKey(u => u.TelegramId) // TelegramId ga bog'lash
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.SetNull)
+                  .IsRequired(false);
         });
 
         // UserSession entity configuration

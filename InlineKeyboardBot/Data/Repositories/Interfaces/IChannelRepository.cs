@@ -11,4 +11,5 @@ public interface IChannelRepository : IBaseRepository<Channel>
     Task<IEnumerable<Channel>> GetChannelsByOwnerIdAsync(long ownerId); // 🆕
     Task<bool> ExistsByChatIdAsync(long chatId);
     Task<bool> IsUserChannelOwnerAsync(long chatId, long userId); // 🆕
+    Task<List<Channel>> GetPendingChannelsByNameAsync(string name);
 }

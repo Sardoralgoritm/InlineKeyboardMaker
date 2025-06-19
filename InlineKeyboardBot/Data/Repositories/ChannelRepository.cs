@@ -47,7 +47,6 @@ public class ChannelRepository : BaseRepository<Channel>, IChannelRepository
         return await _dbSet
             .Include(c => c.Owner)
             .Where(c => c.OwnerId == ownerId && c.IsActive)
-            .OrderBy(c => c.Title)
             .ToListAsync();
     }
 
@@ -59,5 +58,24 @@ public class ChannelRepository : BaseRepository<Channel>, IChannelRepository
     public async Task<bool> ExistsByChatIdAsync(long chatId)
     {
         return await _dbSet.AnyAsync(c => c.ChatId == chatId);
+    }
+
+    public async Task<List<Channel>> GetPendingChannelsByNameAsync(string name)
+    {
+        try
+        {
+            var normalizedName = name.Trim();
+
+            var channels = await _dbSet
+                .Where(c => c.ClaimStatus == ClaimStatus.Pending &&
+                           c.Title == normalizedName)
+                .ToListAsync();
+
+            return channels;
+        }
+        catch (Exception ex)
+        {
+            return new List<Channel>();
+        }
     }
 }

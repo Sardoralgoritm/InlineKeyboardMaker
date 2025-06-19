@@ -84,7 +84,7 @@ public static class InlineKeyboardHelper
             {
                 InlineKeyboardButton.WithCallbackData(
                     $"📺 {channel.DisplayName}",
-                    CallbackCommands.SelectChannel + channel.Id)
+                    $"{CallbackCommands.SelectChannel}_{channel.Id}")
             });
         }
 
@@ -137,6 +137,32 @@ public static class InlineKeyboardHelper
             ButtonLayoutType.Custom => CreateCustomLayout(buttons),
             _ => CreateSingleColumnLayout(buttons)
         };
+    }
+
+    public static InlineKeyboardMarkup ChannelSelectAction(Guid channelId)
+    {
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📝 Yangi post yaratish", $"{CallbackCommands.NewPost}_{channelId}"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("📋 Postlarim", $"{CallbackCommands.MyPosts}_{channelId}"),
+                InlineKeyboardButton.WithCallbackData("📊 Statistika", $"{CallbackCommands.ChannelStats}_{channelId}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⚙️ Sozlamalar", $"{CallbackCommands.Settings}_{channelId}"),
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🔙 Orqaga", CallbackCommands.MyChannels)
+            }
+        });
+
+        return keyboard;
     }
 
     private static InlineKeyboardMarkup CreateSingleColumnLayout(List<InlineButtonDto> buttons)
